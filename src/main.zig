@@ -65,13 +65,13 @@ pub fn Stream(comptime T: type) type {
 // Scanner
 //
 
-const ScannerError = error{UnexpectedSymbol} || std.mem.Allocator.Error;
+const ScanError = error{UnexpectedSymbol} || std.mem.Allocator.Error;
 
 const Scanner = Stream(u8);
 
 const Token = union(enum) { number: i32, symbol: u8 };
 
-fn scan(allocator: std.mem.Allocator, source: []const u8) ScannerError!std.ArrayList(Token) {
+fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).init(allocator);
     errdefer tokens.deinit();
 
@@ -114,7 +114,7 @@ fn scan(allocator: std.mem.Allocator, source: []const u8) ScannerError!std.Array
             scanner.consume() catch unreachable;
             try tokens.append(Token{ .symbol = ')' });
         } else {
-            return ScannerError.UnexpectedSymbol;
+            return ScanError.UnexpectedSymbol;
         }
     }
     return tokens;
@@ -315,7 +315,7 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
-const EvalError = ScannerError || ParseError;
+const EvalError = ScanError || ParseError;
 
 fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!i32 {
     var tokens = try scan(allocator, source);
