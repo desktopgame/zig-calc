@@ -311,6 +311,26 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     }
 }
 
+//
+// Eval
+//
+
+const EvalError = ScannerError || ParseError;
+
+fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!i32 {
+    var tokens = try scan(allocator, source);
+    defer tokens.deinit();
+
+    var node = try parse(std.testing.allocator, tokens.items);
+    defer node.deinit(std.testing.allocator);
+
+    return node.eval();
+}
+
+//
+// main
+//
+
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
@@ -328,6 +348,10 @@ pub fn main() !void {
     _ = try stdout.write(string.items);
     _ = try stdout.write("\n");
 }
+
+//
+// test
+//
 
 test "simple test" {
     var list = std.ArrayList(i32).init(std.testing.allocator);
