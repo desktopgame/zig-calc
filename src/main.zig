@@ -321,8 +321,8 @@ fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!i32 {
     var tokens = try scan(allocator, source);
     defer tokens.deinit();
 
-    var node = try parse(std.testing.allocator, tokens.items);
-    defer node.deinit(std.testing.allocator);
+    var node = try parse(allocator, tokens.items);
+    defer node.deinit(allocator);
 
     return node.eval();
 }
