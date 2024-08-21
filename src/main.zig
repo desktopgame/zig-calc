@@ -1,19 +1,21 @@
 const std = @import("std");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    const allocator = std.heap.page_allocator;
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    var string = std.ArrayList(u8).init(allocator);
+    defer string.deinit();
 
-    try bw.flush(); // don't forget to flush!
+    for (args[1..]) |arg| {
+        _ = try string.appendSlice(arg);
+        _ = try string.append(' ');
+    }
+    const stdout = std.io.getStdOut();
+    _ = try stdout.write(string.items);
+    _ = try stdout.write("\n");
 }
 
 test "simple test" {
