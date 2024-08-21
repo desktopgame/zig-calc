@@ -344,9 +344,9 @@ pub fn main() !void {
         _ = try string.appendSlice(arg);
         _ = try string.append(' ');
     }
-    const stdout = std.io.getStdOut();
-    _ = try stdout.write(string.items);
-    _ = try stdout.write("\n");
+
+    const result = try eval(allocator, string.items);
+    try std.io.getStdOut().writer().print("{d}\n", .{result});
 }
 
 //
