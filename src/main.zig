@@ -373,42 +373,9 @@ test "tokenize" {
     try std.testing.expectEqual(tokens.items[6], Token{ .symbol = ')' });
 }
 
-test "parse1" {
-    var tokens = try scan(std.testing.allocator, "12 + (3*4)");
-    defer tokens.deinit();
-
-    var node = try parse(std.testing.allocator, tokens.items);
-    defer node.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(node.eval(), 24);
-}
-
-test "parse2" {
-    var tokens = try scan(std.testing.allocator, "-5 + (3*(1+1))");
-    defer tokens.deinit();
-
-    var node = try parse(std.testing.allocator, tokens.items);
-    defer node.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(node.eval(), 1);
-}
-
-test "parse3" {
-    var tokens = try scan(std.testing.allocator, "(3*3*3-1)");
-    defer tokens.deinit();
-
-    var node = try parse(std.testing.allocator, tokens.items);
-    defer node.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(node.eval(), 26);
-}
-
-test "parse4" {
-    var tokens = try scan(std.testing.allocator, "(3*3*3-1+1)");
-    defer tokens.deinit();
-
-    var node = try parse(std.testing.allocator, tokens.items);
-    defer node.deinit(std.testing.allocator);
-
-    try std.testing.expectEqual(node.eval(), 27);
+test "eval" {
+    try std.testing.expectEqual(try eval(std.testing.allocator, "12 + (3*4)"), 24);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
 }
