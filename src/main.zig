@@ -381,4 +381,9 @@ test "eval" {
     try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1);
     try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
     try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
+
+    try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+2*"));
+    try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+"));
+    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "()"));
+    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1+2*)"));
 }
