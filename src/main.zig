@@ -200,15 +200,16 @@ fn parse(allocator: std.mem.Allocator, source: []const Token) ParseError!*Node {
         .source = source,
         .pos = 0,
     };
-    return parseExpr(allocator, &p);
+    return try parseExpr(allocator, &p);
 }
 
 fn parseExpr(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
-    return parseAddSub(allocator, p);
+    return try parseAddSub(allocator, p);
 }
 
 fn parseAddSub(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     var left = try parseMulDiv(allocator, p);
+    errdefer left.deinit(allocator);
     while (p.get()) |token| {
         switch (token) {
             .number => {
@@ -235,6 +236,7 @@ fn parseAddSub(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 
 fn parseMulDiv(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     var left = try parseNegative(allocator, p);
+    errdefer left.deinit(allocator);
     while (p.get()) |token| {
         switch (token) {
             .number => {
@@ -270,12 +272,12 @@ fn parseNegative(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
                 return negativeNode;
             } else {
                 p.unget() catch unreachable;
-                return parsePrimary(allocator, p);
+                return try parsePrimary(allocator, p);
             }
         },
         else => {
             p.unget() catch unreachable;
-            return parsePrimary(allocator, p);
+            return try parsePrimary(allocator, p);
         },
     }
 }
@@ -291,7 +293,8 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
         },
         .symbol => |sym| {
             if (sym == '(') {
-                const node = parseExpr(allocator, p);
+                const node = try parseExpr(allocator, p);
+                errdefer node.deinit(allocator);
                 const close = p.get() orelse return ParseError.UnexpectedTerminate;
                 switch (close) {
                     .number => {
