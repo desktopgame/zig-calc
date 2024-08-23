@@ -160,6 +160,10 @@ const Parser = Stream(Token);
 const Node = union(enum) {
     number: f32,
     variable: []const u8,
+    call: struct {
+        f: *Node,
+        args: std.ArrayList(*Node),
+    },
     binaryOperator: struct { leftArg: *Node, rightArg: *Node, symbol: u8 },
     unaryOperator: struct {
         arg: *Node,
@@ -199,6 +203,14 @@ fn parse(allocator: std.mem.Allocator, source: []const Token) ParseError!*Node {
         return ParseError.UnexpectedToken;
     }
     return node;
+}
+
+fn parseExprOpt(allocator: std.mem.Allocator, p: *Parser) ?*Node {
+    if (parseExpr(allocator, p)) |node| {
+        return node;
+    } else |_| {
+        return null;
+    }
 }
 
 fn parseExpr(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
@@ -272,18 +284,81 @@ fn parseNegative(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             if (sym == '-') {
                 const negativeNode = try Node.init(allocator);
                 errdefer negativeNode.deinit(allocator);
-                negativeNode.* = .{ .unaryOperator = .{ .arg = try parsePrimary(allocator, p), .symbol = '-' } };
+                negativeNode.* = .{ .unaryOperator = .{ .arg = try parseCall(allocator, p), .symbol = '-' } };
                 return negativeNode;
             } else {
                 p.unget() catch unreachable;
-                return try parsePrimary(allocator, p);
+                return try parseCall(allocator, p);
             }
         },
         else => {
             p.unget() catch unreachable;
-            return try parsePrimary(allocator, p);
+            return try parseCall(allocator, p);
         },
     }
+}
+
+fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
+    var expr = try parsePrimary(allocator, p);
+    errdefer expr.deinit(allocator);
+    while (p.get()) |token| {
+        switch (token) {
+            .symbol => |open| {
+                if (open == '(') {
+                    var args = std.ArrayList(*Node).init(allocator);
+                    errdefer args.deinit();
+                    while (true) {
+                        const argOpt = parseExprOpt(allocator, p);
+                        if (argOpt == null) {
+                            break;
+                        }
+                        try args.append(argOpt.?);
+                        if (p.get()) |camma| {
+                            switch (camma) {
+                                .symbol => |separateSym| {
+                                    if (separateSym == ',') {} else if (separateSym == ')') {
+                                        p.unget() catch unreachable;
+                                    } else {
+                                        return ParseError.UnexpectedToken;
+                                    }
+                                },
+                                else => {
+                                    return ParseError.UnexpectedToken;
+                                },
+                            }
+                        } else {
+                            return ParseError.UnexpectedTerminate;
+                        }
+                    }
+                    if (p.get()) |closeToken| {
+                        switch (closeToken) {
+                            .symbol => |closeSym| {
+                                if (closeSym != ')') {
+                                    return ParseError.UnexpectedToken;
+                                }
+                            },
+                            else => {
+                                return ParseError.UnexpectedToken;
+                            },
+                        }
+                    } else {
+                        return ParseError.UnexpectedTerminate;
+                    }
+                    const call = try Node.init(allocator);
+                    call.* = .{ .call = .{ .f = expr, .args = args } };
+                    expr = call;
+                } else {
+                    p.unget() catch unreachable;
+                    return expr;
+                }
+            },
+            else => {
+                p.unget() catch unreachable;
+                return expr;
+            },
+        }
+    }
+    return expr;
 }
 
 fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
@@ -333,14 +408,14 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 
 const Value = union(enum) {
     number: f32,
-    f: *fn ([]const f32) f32,
+    f: *fn ([]const Value) Value,
 };
 
-const EvalError = error{ UndefinedIdentifier, CannotOperation };
+const EvalError = error{ UndefinedIdentifier, CannotOperation } || std.mem.Allocator.Error;
 
 const InterpretError = error{ValueIsFunction} || ScanError || ParseError || EvalError;
 
-fn eval(node: *Node) EvalError!Value {
+fn eval(allocator: std.mem.Allocator, node: *Node) EvalError!Value {
     switch (node.*) {
         .number => |num| {
             return .{ .number = num };
@@ -351,9 +426,26 @@ fn eval(node: *Node) EvalError!Value {
             }
             return EvalError.UndefinedIdentifier;
         },
+        .call => |c| {
+            const fv = try eval(allocator, c.f);
+            switch (fv) {
+                .f => |f| {
+                    var argv = std.ArrayList(Value).init(allocator);
+                    defer argv.deinit();
+
+                    for (c.args.items) |arg| {
+                        try argv.append(try eval(allocator, arg));
+                    }
+                    return f(argv.items);
+                },
+                else => {
+                    return EvalError.CannotOperation;
+                },
+            }
+        },
         .binaryOperator => |binOp| {
-            const left = literal(try eval(binOp.leftArg)) orelse return EvalError.CannotOperation;
-            const right = literal(try eval(binOp.rightArg)) orelse return EvalError.CannotOperation;
+            const left = literal(try eval(allocator, binOp.leftArg)) orelse return EvalError.CannotOperation;
+            const right = literal(try eval(allocator, binOp.rightArg)) orelse return EvalError.CannotOperation;
             switch (binOp.symbol) {
                 '+' => {
                     return .{ .number = left + right };
@@ -374,7 +466,7 @@ fn eval(node: *Node) EvalError!Value {
             }
         },
         .unaryOperator => |uOp| {
-            const arg = literal(try eval(uOp.arg)) orelse return EvalError.CannotOperation;
+            const arg = literal(try eval(allocator, uOp.arg)) orelse return EvalError.CannotOperation;
             switch (uOp.symbol) {
                 '-' => {
                     return .{ .number = -arg };
@@ -403,7 +495,7 @@ fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f3
     var node = try parse(allocator, tokens.items);
     defer node.deinit(allocator);
 
-    switch (try eval(node)) {
+    switch (try eval(allocator, node)) {
         .f => |_| {
             return InterpretError.ValueIsFunction;
         },
@@ -483,7 +575,7 @@ test "eval" {
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1+"));
     try std.testing.expectError(ParseError.UnexpectedToken, interpret(std.testing.allocator, "()"));
     try std.testing.expectError(ParseError.UnexpectedToken, interpret(std.testing.allocator, "1+2*)"));
-    try std.testing.expectError(ParseError.UnexpectedToken, interpret(std.testing.allocator, "1("));
+    try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1("));
     try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "1."));
     try std.testing.expectError(ScanError.UnexpectedSymbol, interpret(std.testing.allocator, "1. + 1"));
 }
