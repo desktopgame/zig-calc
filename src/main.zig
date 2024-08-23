@@ -331,7 +331,7 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
-const EvalError = error{UndefinedVariable};
+const EvalError = error{UndefinedIdentifier};
 
 const InterpretError = ScanError || ParseError || EvalError;
 
@@ -344,7 +344,7 @@ fn eval(node: *Node) EvalError!f32 {
             if (global(v)) |globalVar| {
                 return globalVar;
             }
-            return EvalError.UndefinedVariable;
+            return EvalError.UndefinedIdentifier;
         },
         .binaryOperator => |binOp| {
             const left = try eval(binOp.leftArg);
