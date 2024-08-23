@@ -331,14 +331,19 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
-const EvalError = error{UndefinedIdentifier};
+const Value = union(enum) {
+    number: f32,
+    f: *fn ([]const f32) f32,
+};
 
-const InterpretError = ScanError || ParseError || EvalError;
+const EvalError = error{ UndefinedIdentifier, CannotOperation };
 
-fn eval(node: *Node) EvalError!f32 {
+const InterpretError = error{ValueIsFunction} || ScanError || ParseError || EvalError;
+
+fn eval(node: *Node) EvalError!Value {
     switch (node.*) {
         .number => |num| {
-            return num;
+            return .{ .number = num };
         },
         .variable => |v| {
             if (global(v)) |globalVar| {
@@ -347,35 +352,46 @@ fn eval(node: *Node) EvalError!f32 {
             return EvalError.UndefinedIdentifier;
         },
         .binaryOperator => |binOp| {
-            const left = try eval(binOp.leftArg);
-            const right = try eval(binOp.rightArg);
+            const left = literal(try eval(binOp.leftArg)) orelse return EvalError.CannotOperation;
+            const right = literal(try eval(binOp.rightArg)) orelse return EvalError.CannotOperation;
             switch (binOp.symbol) {
                 '+' => {
-                    return left + right;
+                    return .{ .number = left + right };
                 },
                 '-' => {
-                    return left - right;
+                    return .{ .number = left - right };
                 },
                 '*' => {
-                    return left * right;
+                    return .{ .number = left * right };
                 },
                 '/' => {
-                    return left / right;
+                    return .{ .number = left / right };
                 },
                 '%' => {
-                    return @mod(left, right);
+                    return .{ .number = @mod(left, right) };
                 },
                 else => unreachable,
             }
         },
         .unaryOperator => |uOp| {
-            const arg = try eval(uOp.arg);
+            const arg = literal(try eval(uOp.arg)) orelse return EvalError.CannotOperation;
             switch (uOp.symbol) {
                 '-' => {
-                    return -arg;
+                    return .{ .number = -arg };
                 },
                 else => unreachable,
             }
+        },
+    }
+}
+
+fn literal(value: Value) ?f32 {
+    switch (value) {
+        .number => |num| {
+            return num;
+        },
+        else => {
+            return null;
         },
     }
 }
@@ -387,14 +403,21 @@ fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f3
     var node = try parse(allocator, tokens.items);
     defer node.deinit(allocator);
 
-    return eval(node);
+    switch (try eval(node)) {
+        .f => |_| {
+            return InterpretError.ValueIsFunction;
+        },
+        .number => |num| {
+            return num;
+        },
+    }
 }
 
-const PI = 3.14;
+const PI: f32 = 3.14;
 
-fn global(name: []const u8) ?f32 {
+fn global(name: []const u8) ?Value {
     if (std.mem.eql(u8, name, "PI")) {
-        return PI;
+        return .{ .number = PI };
     }
     return null;
 }
