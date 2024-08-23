@@ -341,7 +341,7 @@ fn eval(node: *Node) EvalError!f32 {
             return num;
         },
         .variable => |v| {
-            if (globalVariable(v)) |globalVar| {
+            if (global(v)) |globalVar| {
                 return globalVar;
             }
             return EvalError.UndefinedVariable;
@@ -392,7 +392,7 @@ fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f3
 
 const PI = 3.14;
 
-fn globalVariable(name: []const u8) ?f32 {
+fn global(name: []const u8) ?f32 {
     if (std.mem.eql(u8, name, "PI")) {
         return PI;
     }
