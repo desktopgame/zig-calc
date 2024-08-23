@@ -200,7 +200,13 @@ fn parse(allocator: std.mem.Allocator, source: []const Token) ParseError!*Node {
         .source = source,
         .pos = 0,
     };
-    return try parseExpr(allocator, &p);
+    const node = try parseExpr(allocator, &p);
+    errdefer node.deinit(allocator);
+
+    if (p.ready()) {
+        return ParseError.UnexpectedToken;
+    }
+    return node;
 }
 
 fn parseExpr(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
@@ -381,9 +387,11 @@ test "eval" {
     try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1);
     try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
     try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "((1)+1)"), 2);
 
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+2*"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+"));
     try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "()"));
     try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1+2*)"));
+    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1("));
 }
