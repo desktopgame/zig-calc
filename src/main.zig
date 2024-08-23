@@ -69,7 +69,7 @@ const ScanError = error{ UnexpectedSymbol, UnexpectedTerminate } || std.mem.Allo
 
 const Scanner = Stream(u8);
 
-const Token = union(enum) { number: f32, symbol: u8 };
+const Token = union(enum) { number: f32, identifier: []const u8, symbol: u8 };
 
 fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).init(allocator);
@@ -112,6 +112,15 @@ fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayLis
                 }
             }
             try tokens.append(Token{ .number = std.fmt.parseFloat(f32, scanner.source[start..scanner.pos]) catch unreachable });
+        } else if (std.ascii.isAlphabetic(ahead)) {
+            const start = scanner.pos;
+            while (scanner.get()) |c| {
+                if (!std.ascii.isAlphabetic(c)) {
+                    scanner.unget() catch unreachable;
+                    break;
+                }
+            }
+            try tokens.append(Token{ .identifier = scanner.source[start..scanner.pos] });
         } else if (ahead == '+') {
             scanner.consume() catch unreachable;
             try tokens.append(Token{ .symbol = '+' });
@@ -150,6 +159,7 @@ const Parser = Stream(Token);
 
 const Node = union(enum) {
     number: f32,
+    variable: []const u8,
     binaryOperator: struct { leftArg: *Node, rightArg: *Node, symbol: u8 },
     unaryOperator: struct {
         arg: *Node,
@@ -203,6 +213,9 @@ fn parseAddSub(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             .number => {
                 return ParseError.UnexpectedToken;
             },
+            .identifier => {
+                return ParseError.UnexpectedToken;
+            },
             .symbol => |sym| {
                 switch (sym) {
                     '+', '-' => {
@@ -228,6 +241,9 @@ fn parseMulDiv(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     while (p.get()) |token| {
         switch (token) {
             .number => {
+                return ParseError.UnexpectedToken;
+            },
+            .identifier => {
                 return ParseError.UnexpectedToken;
             },
             .symbol => |sym| {
@@ -279,6 +295,12 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             prim.* = .{ .number = num };
             return prim;
         },
+        .identifier => |ident| {
+            const variable = try Node.init(allocator);
+            errdefer variable.deinit(allocator);
+            variable.* = .{ .variable = ident };
+            return variable;
+        },
         .symbol => |sym| {
             if (sym == '(') {
                 const node = try parseExpr(allocator, p);
@@ -286,6 +308,9 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
                 const close = p.get() orelse return ParseError.UnexpectedTerminate;
                 switch (close) {
                     .number => {
+                        return ParseError.UnexpectedToken;
+                    },
+                    .identifier => {
                         return ParseError.UnexpectedToken;
                     },
                     .symbol => |symClose| {
@@ -306,7 +331,7 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
-const EvalError = error{};
+const EvalError = error{UndefinedVariable};
 
 const InterpretError = ScanError || ParseError || EvalError;
 
@@ -314,6 +339,12 @@ fn eval(node: *Node) EvalError!f32 {
     switch (node.*) {
         .number => |num| {
             return num;
+        },
+        .variable => |v| {
+            if (globalVariable(v)) |globalVar| {
+                return globalVar;
+            }
+            return EvalError.UndefinedVariable;
         },
         .binaryOperator => |binOp| {
             const left = try eval(binOp.leftArg);
@@ -357,6 +388,15 @@ fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f3
     defer node.deinit(allocator);
 
     return eval(node);
+}
+
+const PI = 3.14;
+
+fn globalVariable(name: []const u8) ?f32 {
+    if (std.mem.eql(u8, name, "PI")) {
+        return PI;
+    }
+    return null;
 }
 
 //
@@ -414,6 +454,7 @@ test "eval" {
     try std.testing.expectEqual(try interpret(std.testing.allocator, "-(-1)"), 1.0);
     try std.testing.expectEqual(try interpret(std.testing.allocator, "1.5+1.5"), 3.0);
     try std.testing.expectEqual(try interpret(std.testing.allocator, "-1 / 2"), -0.5);
+    try std.testing.expectEqual(try interpret(std.testing.allocator, "PI"), PI);
 
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1+2*"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1+"));
