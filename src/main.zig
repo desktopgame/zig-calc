@@ -406,12 +406,14 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
+const FunctionError = error{ InvalidArgumentCount, InvalidArgumentType };
+
 const Value = union(enum) {
     number: f32,
-    f: *fn ([]const Value) Value,
+    f: *fn ([]const Value) FunctionError!Value,
 };
 
-const EvalError = error{ UndefinedIdentifier, CannotOperation } || std.mem.Allocator.Error;
+const EvalError = error{ UndefinedIdentifier, CannotOperation } || FunctionError || std.mem.Allocator.Error;
 
 const InterpretError = error{ValueIsFunction} || ScanError || ParseError || EvalError;
 
@@ -436,7 +438,7 @@ fn eval(allocator: std.mem.Allocator, node: *Node) EvalError!Value {
                     for (c.args.items) |arg| {
                         try argv.append(try eval(allocator, arg));
                     }
-                    return f(argv.items);
+                    return try f(argv.items);
                 },
                 else => {
                     return EvalError.CannotOperation;
