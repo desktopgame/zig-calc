@@ -65,7 +65,7 @@ pub fn Stream(comptime T: type) type {
 // Scanner
 //
 
-const ScanError = error{UnexpectedSymbol} || std.mem.Allocator.Error;
+const ScanError = error{ UnexpectedSymbol, UnexpectedTerminate } || std.mem.Allocator.Error;
 
 const Scanner = Stream(u8);
 
@@ -89,6 +89,26 @@ fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayLis
                 if (!std.ascii.isDigit(c)) {
                     scanner.unget() catch unreachable;
                     break;
+                }
+            }
+            if (scanner.get()) |d| {
+                if (d == '.') {
+                    const dotPos = scanner.pos;
+                    while (scanner.get()) |c| {
+                        if (!std.ascii.isDigit(c)) {
+                            scanner.unget() catch unreachable;
+                            break;
+                        }
+                    }
+                    if (scanner.pos == dotPos) {
+                        if (scanner.ready()) {
+                            return ScanError.UnexpectedSymbol;
+                        } else {
+                            return ScanError.UnexpectedTerminate;
+                        }
+                    }
+                } else {
+                    scanner.unget() catch unreachable;
                 }
             }
             try tokens.append(Token{ .number = std.fmt.parseFloat(f32, scanner.source[start..scanner.pos]) catch unreachable });
@@ -389,10 +409,14 @@ test "eval" {
     try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
     try std.testing.expectEqual(try eval(std.testing.allocator, "((1)+1)"), 2.0);
     try std.testing.expectEqual(try eval(std.testing.allocator, "-(-1)"), 1.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "1.5+1.5"), 3.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "-1 / 2"), -0.5);
 
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+2*"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+"));
     try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "()"));
     try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1+2*)"));
     try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1("));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, eval(std.testing.allocator, "1."));
+    try std.testing.expectError(ScanError.UnexpectedSymbol, eval(std.testing.allocator, "1. + 1"));
 }
