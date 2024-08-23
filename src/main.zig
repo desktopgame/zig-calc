@@ -174,44 +174,6 @@ const Node = union(enum) {
         allocator.destroy(self);
     }
 
-    pub fn eval(self: *Self) f32 {
-        switch (self.*) {
-            .number => |num| {
-                return num;
-            },
-            .binaryOperator => |binOp| {
-                const left = binOp.leftArg.eval();
-                const right = binOp.rightArg.eval();
-                switch (binOp.symbol) {
-                    '+' => {
-                        return left + right;
-                    },
-                    '-' => {
-                        return left - right;
-                    },
-                    '*' => {
-                        return left * right;
-                    },
-                    '/' => {
-                        return left / right;
-                    },
-                    '%' => {
-                        return @mod(left, right);
-                    },
-                    else => unreachable,
-                }
-            },
-            .unaryOperator => |uOp| {
-                const arg = uOp.arg.eval();
-                switch (uOp.symbol) {
-                    '-' => {
-                        return -arg;
-                    },
-                    else => unreachable,
-                }
-            },
-        }
-    }
     const Self = @This();
 };
 
@@ -353,7 +315,46 @@ fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!f32 {
     var node = try parse(allocator, tokens.items);
     defer node.deinit(allocator);
 
-    return node.eval();
+    return evalNode(node);
+}
+
+fn evalNode(node: *Node) f32 {
+    switch (node.*) {
+        .number => |num| {
+            return num;
+        },
+        .binaryOperator => |binOp| {
+            const left = evalNode(binOp.leftArg);
+            const right = evalNode(binOp.rightArg);
+            switch (binOp.symbol) {
+                '+' => {
+                    return left + right;
+                },
+                '-' => {
+                    return left - right;
+                },
+                '*' => {
+                    return left * right;
+                },
+                '/' => {
+                    return left / right;
+                },
+                '%' => {
+                    return @mod(left, right);
+                },
+                else => unreachable,
+            }
+        },
+        .unaryOperator => |uOp| {
+            const arg = evalNode(uOp.arg);
+            switch (uOp.symbol) {
+                '-' => {
+                    return -arg;
+                },
+                else => unreachable,
+            }
+        },
+    }
 }
 
 //
