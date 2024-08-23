@@ -142,6 +142,9 @@ fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayLis
         } else if (ahead == ')') {
             scanner.consume() catch unreachable;
             try tokens.append(Token{ .symbol = ')' });
+        } else if (ahead == ',') {
+            scanner.consume() catch unreachable;
+            try tokens.append(Token{ .symbol = ',' });
         } else {
             return ScanError.UnexpectedSymbol;
         }
@@ -176,6 +179,13 @@ const Node = union(enum) {
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         switch (self.*) {
+            .call => |c| {
+                c.f.deinit(allocator);
+                for (c.args.items) |item| {
+                    item.deinit(allocator);
+                }
+                c.args.deinit();
+            },
             .binaryOperator => |binOp| {
                 binOp.leftArg.deinit(allocator);
                 binOp.rightArg.deinit(allocator);
@@ -231,9 +241,11 @@ fn parseAddSub(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             .symbol => |sym| {
                 switch (sym) {
                     '+', '-' => {
+                        const right = try parseMulDiv(allocator, p);
+                        errdefer right.deinit(allocator);
                         const node = try Node.init(allocator);
                         errdefer node.deinit(allocator);
-                        node.* = .{ .binaryOperator = .{ .leftArg = left, .rightArg = try parseMulDiv(allocator, p), .symbol = sym } };
+                        node.* = .{ .binaryOperator = .{ .leftArg = left, .rightArg = right, .symbol = sym } };
                         left = node;
                     },
                     else => {
@@ -261,9 +273,11 @@ fn parseMulDiv(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             .symbol => |sym| {
                 switch (sym) {
                     '*', '/', '%' => {
+                        const right = try parseNegative(allocator, p);
+                        errdefer right.deinit(allocator);
                         const node = try Node.init(allocator);
                         errdefer node.deinit(allocator);
-                        node.* = .{ .binaryOperator = .{ .leftArg = left, .rightArg = try parseNegative(allocator, p), .symbol = sym } };
+                        node.* = .{ .binaryOperator = .{ .leftArg = left, .rightArg = right, .symbol = sym } };
                         left = node;
                     },
                     else => {
@@ -282,9 +296,11 @@ fn parseNegative(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     switch (ahead) {
         .symbol => |sym| {
             if (sym == '-') {
+                const arg = try parseCall(allocator, p);
+                errdefer arg.deinit(allocator);
                 const negativeNode = try Node.init(allocator);
                 errdefer negativeNode.deinit(allocator);
-                negativeNode.* = .{ .unaryOperator = .{ .arg = try parseCall(allocator, p), .symbol = '-' } };
+                negativeNode.* = .{ .unaryOperator = .{ .arg = arg, .symbol = '-' } };
                 return negativeNode;
             } else {
                 p.unget() catch unreachable;
@@ -306,18 +322,21 @@ fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
             .symbol => |open| {
                 if (open == '(') {
                     var args = std.ArrayList(*Node).init(allocator);
-                    errdefer args.deinit();
                     while (true) {
-                        const argOpt = parseExprOpt(allocator, p);
-                        if (argOpt == null) {
-                            break;
+                        const arg = parseExpr(allocator, p) catch break;
+                        errdefer {
+                            for (args.items) |item| {
+                                item.deinit(allocator);
+                            }
+                            args.deinit();
                         }
-                        try args.append(argOpt.?);
+                        try args.append(arg);
                         if (p.get()) |camma| {
                             switch (camma) {
                                 .symbol => |separateSym| {
                                     if (separateSym == ',') {} else if (separateSym == ')') {
                                         p.unget() catch unreachable;
+                                        break;
                                     } else {
                                         return ParseError.UnexpectedToken;
                                     }
@@ -329,6 +348,12 @@ fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
                         } else {
                             return ParseError.UnexpectedTerminate;
                         }
+                    }
+                    errdefer {
+                        for (args.items) |item| {
+                            item.deinit(allocator);
+                        }
+                        args.deinit();
                     }
                     if (p.get()) |closeToken| {
                         switch (closeToken) {
@@ -345,6 +370,7 @@ fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
                         return ParseError.UnexpectedTerminate;
                     }
                     const call = try Node.init(allocator);
+                    errdefer call.deinit(allocator);
                     call.* = .{ .call = .{ .f = expr, .args = args } };
                     expr = call;
                 } else {
@@ -410,7 +436,7 @@ const FunctionError = error{ InvalidArgumentCount, InvalidArgumentType };
 
 const Value = union(enum) {
     number: f32,
-    f: *fn ([]const Value) FunctionError!Value,
+    f: *const fn ([]const Value) FunctionError!Value,
 };
 
 const EvalError = error{ UndefinedIdentifier, CannotOperation } || FunctionError || std.mem.Allocator.Error;
@@ -516,8 +542,56 @@ const PI: f32 = 3.14;
 fn global(name: []const u8) ?Value {
     if (std.mem.eql(u8, name, "PI")) {
         return .{ .number = PI };
+    } else if (std.mem.eql(u8, name, "min")) {
+        return .{ .f = &blt_min };
+    } else if (std.mem.eql(u8, name, "max")) {
+        return .{ .f = &blt_max };
     }
     return null;
+}
+
+fn blt_min(args: []const Value) FunctionError!Value {
+    var min: f32 = std.math.floatMax(f32);
+    for (args) |arg| {
+        const farg = try shouldBeLiteral(arg);
+        if (farg < min) {
+            min = farg;
+        }
+    }
+    return .{ .number = min };
+}
+
+fn blt_max(args: []const Value) FunctionError!Value {
+    var max: f32 = std.math.floatMin(f32);
+    for (args) |arg| {
+        const farg = try shouldBeLiteral(arg);
+        if (farg > max) {
+            max = farg;
+        }
+    }
+    return .{ .number = max };
+}
+
+fn shouldBeLiteral(v: Value) FunctionError!f32 {
+    switch (v) {
+        .f => |_| {
+            return FunctionError.InvalidArgumentType;
+        },
+        .number => |num| {
+            return num;
+        },
+    }
+}
+
+fn shouldBeFunction(v: Value) FunctionError!fn (Value) Value {
+    switch (v) {
+        .number => |_| {
+            return FunctionError.InvalidArgumentType;
+        },
+        .f => |f| {
+            return f;
+        },
+    }
 }
 
 //
@@ -576,9 +650,19 @@ test "eval" {
     try std.testing.expectEqual(try interpret(std.testing.allocator, "1.5+1.5"), 3.0);
     try std.testing.expectEqual(try interpret(std.testing.allocator, "-1 / 2"), -0.5);
     try std.testing.expectEqual(try interpret(std.testing.allocator, "PI"), PI);
+    try std.testing.expectEqual(try interpret(std.testing.allocator, "min(1,2)"), 1);
+    try std.testing.expectEqual(try interpret(std.testing.allocator, "max(1,2)"), 2);
 
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1+2*"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1+"));
+    try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1("));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "max(1,2"));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "max(1"));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "1."));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "max("));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "2*"));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, interpret(std.testing.allocator, "max(1,2*"));
+
     try std.testing.expectError(ParseError.UnexpectedToken, interpret(std.testing.allocator, "()"));
     try std.testing.expectError(ParseError.UnexpectedToken, interpret(std.testing.allocator, "1+2*)"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, interpret(std.testing.allocator, "1("));
