@@ -69,7 +69,7 @@ const ScanError = error{UnexpectedSymbol} || std.mem.Allocator.Error;
 
 const Scanner = Stream(u8);
 
-const Token = union(enum) { number: i32, symbol: u8 };
+const Token = union(enum) { number: f32, symbol: u8 };
 
 fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).init(allocator);
@@ -91,7 +91,7 @@ fn scan(allocator: std.mem.Allocator, source: []const u8) ScanError!std.ArrayLis
                     break;
                 }
             }
-            try tokens.append(Token{ .number = std.fmt.parseInt(i32, scanner.source[start..scanner.pos], 10) catch unreachable });
+            try tokens.append(Token{ .number = std.fmt.parseFloat(f32, scanner.source[start..scanner.pos]) catch unreachable });
         } else if (ahead == '+') {
             scanner.consume() catch unreachable;
             try tokens.append(Token{ .symbol = '+' });
@@ -129,7 +129,7 @@ const ParseError = error{ UnexpectedToken, UnexpectedTerminate } || std.mem.Allo
 const Parser = Stream(Token);
 
 const Node = union(enum) {
-    number: i32,
+    number: f32,
     binaryOperator: struct { leftArg: *Node, rightArg: *Node, symbol: u8 },
     unaryOperator: struct {
         arg: *Node,
@@ -154,7 +154,7 @@ const Node = union(enum) {
         allocator.destroy(self);
     }
 
-    pub fn eval(self: *Self) i32 {
+    pub fn eval(self: *Self) f32 {
         switch (self.*) {
             .number => |num| {
                 return num;
@@ -173,7 +173,7 @@ const Node = union(enum) {
                         return left * right;
                     },
                     '/' => {
-                        return @divFloor(left, right);
+                        return left / right;
                     },
                     '%' => {
                         return @mod(left, right);
@@ -326,7 +326,7 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 
 const EvalError = ScanError || ParseError;
 
-fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!i32 {
+fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!f32 {
     var tokens = try scan(allocator, source);
     defer tokens.deinit();
 
@@ -383,11 +383,12 @@ test "tokenize" {
 }
 
 test "eval" {
-    try std.testing.expectEqual(try eval(std.testing.allocator, "12 + (3*4)"), 24);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "((1)+1)"), 2);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "12 + (3*4)"), 24.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "((1)+1)"), 2.0);
+    try std.testing.expectEqual(try eval(std.testing.allocator, "-(-1)"), 1.0);
 
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+2*"));
     try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+"));
