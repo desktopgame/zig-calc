@@ -308,7 +308,7 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 
 const EvalError = ScanError || ParseError;
 
-fn eval(allocator: std.mem.Allocator, source: []const u8) EvalError!f32 {
+fn evalString(allocator: std.mem.Allocator, source: []const u8) EvalError!f32 {
     var tokens = try scan(allocator, source);
     defer tokens.deinit();
 
@@ -375,7 +375,7 @@ pub fn main() !void {
         _ = try string.append(' ');
     }
 
-    const result = try eval(allocator, string.items);
+    const result = try evalString(allocator, string.items);
     try std.io.getStdOut().writer().print("{d}\n", .{result});
 }
 
@@ -404,20 +404,20 @@ test "tokenize" {
 }
 
 test "eval" {
-    try std.testing.expectEqual(try eval(std.testing.allocator, "12 + (3*4)"), 24.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "-5 + (3*(1+1))"), 1.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "((1)+1)"), 2.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "-(-1)"), 1.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "1.5+1.5"), 3.0);
-    try std.testing.expectEqual(try eval(std.testing.allocator, "-1 / 2"), -0.5);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "12 + (3*4)"), 24.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "-5 + (3*(1+1))"), 1.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "(3*3*3-1+1)"), 27.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "((1)+1)"), 2.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "-(-1)"), 1.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "1.5+1.5"), 3.0);
+    try std.testing.expectEqual(try evalString(std.testing.allocator, "-1 / 2"), -0.5);
 
-    try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+2*"));
-    try std.testing.expectError(ParseError.UnexpectedTerminate, eval(std.testing.allocator, "1+"));
-    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "()"));
-    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1+2*)"));
-    try std.testing.expectError(ParseError.UnexpectedToken, eval(std.testing.allocator, "1("));
-    try std.testing.expectError(ScanError.UnexpectedTerminate, eval(std.testing.allocator, "1."));
-    try std.testing.expectError(ScanError.UnexpectedSymbol, eval(std.testing.allocator, "1. + 1"));
+    try std.testing.expectError(ParseError.UnexpectedTerminate, evalString(std.testing.allocator, "1+2*"));
+    try std.testing.expectError(ParseError.UnexpectedTerminate, evalString(std.testing.allocator, "1+"));
+    try std.testing.expectError(ParseError.UnexpectedToken, evalString(std.testing.allocator, "()"));
+    try std.testing.expectError(ParseError.UnexpectedToken, evalString(std.testing.allocator, "1+2*)"));
+    try std.testing.expectError(ParseError.UnexpectedToken, evalString(std.testing.allocator, "1("));
+    try std.testing.expectError(ScanError.UnexpectedTerminate, evalString(std.testing.allocator, "1."));
+    try std.testing.expectError(ScanError.UnexpectedSymbol, evalString(std.testing.allocator, "1. + 1"));
 }
