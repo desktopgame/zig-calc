@@ -505,6 +505,10 @@ fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f3
     }
 }
 
+//
+// builtins
+//
+
 const PI: f32 = 3.14;
 
 fn global(name: []const u8) ?Value {
