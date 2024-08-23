@@ -306,26 +306,18 @@ fn parsePrimary(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
 // Eval
 //
 
-const EvalError = ScanError || ParseError;
+const EvalError = error{};
 
-fn interpret(allocator: std.mem.Allocator, source: []const u8) EvalError!f32 {
-    var tokens = try scan(allocator, source);
-    defer tokens.deinit();
+const InterpretError = ScanError || ParseError || EvalError;
 
-    var node = try parse(allocator, tokens.items);
-    defer node.deinit(allocator);
-
-    return eval(node);
-}
-
-fn eval(node: *Node) f32 {
+fn eval(node: *Node) EvalError!f32 {
     switch (node.*) {
         .number => |num| {
             return num;
         },
         .binaryOperator => |binOp| {
-            const left = eval(binOp.leftArg);
-            const right = eval(binOp.rightArg);
+            const left = try eval(binOp.leftArg);
+            const right = try eval(binOp.rightArg);
             switch (binOp.symbol) {
                 '+' => {
                     return left + right;
@@ -346,7 +338,7 @@ fn eval(node: *Node) f32 {
             }
         },
         .unaryOperator => |uOp| {
-            const arg = eval(uOp.arg);
+            const arg = try eval(uOp.arg);
             switch (uOp.symbol) {
                 '-' => {
                     return -arg;
@@ -355,6 +347,16 @@ fn eval(node: *Node) f32 {
             }
         },
     }
+}
+
+fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f32 {
+    var tokens = try scan(allocator, source);
+    defer tokens.deinit();
+
+    var node = try parse(allocator, tokens.items);
+    defer node.deinit(allocator);
+
+    return eval(node);
 }
 
 //
