@@ -14,14 +14,18 @@ const global = _builtin.global;
 
 pub const FunctionError = error{ InvalidArgumentCount, InvalidArgumentType };
 
+pub const EvalError = error{ UndefinedIdentifier, CannotOperation } || FunctionError || std.mem.Allocator.Error;
+
+pub const InterpretError = error{ValueIsFunction} || ScanError || ParseError || EvalError;
+
 pub const Value = union(enum) {
     number: f32,
     f: *const fn ([]const Value) FunctionError!Value,
 };
 
-pub const EvalError = error{ UndefinedIdentifier, CannotOperation } || FunctionError || std.mem.Allocator.Error;
-
-pub const InterpretError = error{ValueIsFunction} || ScanError || ParseError || EvalError;
+//
+// eval
+//
 
 pub fn eval(allocator: std.mem.Allocator, node: *Node) EvalError!Value {
     switch (node.*) {
@@ -95,6 +99,10 @@ fn literal(value: Value) ?f32 {
         },
     }
 }
+
+//
+// interpret
+//
 
 pub fn interpret(allocator: std.mem.Allocator, source: []const u8) InterpretError!f32 {
     var tokens = try scan(allocator, source);

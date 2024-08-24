@@ -3,8 +3,6 @@ const _eval = @import("eval.zig");
 const Value = _eval.Value;
 const FunctionError = _eval.FunctionError;
 
-pub const PI: f32 = 3.14;
-
 pub fn global(name: []const u8) ?Value {
     if (std.mem.eql(u8, name, "PI")) {
         return .{ .number = PI };
@@ -15,6 +13,16 @@ pub fn global(name: []const u8) ?Value {
     }
     return null;
 }
+
+//
+// builtin variables
+//
+
+pub const PI: f32 = 3.14;
+
+//
+// builtin functions
+//
 
 pub fn blt_min(args: []const Value) FunctionError!Value {
     var min: f32 = std.math.floatMax(f32);
@@ -37,6 +45,10 @@ pub fn blt_max(args: []const Value) FunctionError!Value {
     }
     return .{ .number = max };
 }
+
+//
+// helper
+//
 
 fn shouldBeLiteral(v: Value) FunctionError!f32 {
     switch (v) {
