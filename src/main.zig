@@ -59,16 +59,18 @@ test "eval" {
     try std.testing.expectError(lib.ParseError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1+2*"));
     try std.testing.expectError(lib.ParseError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1+"));
     try std.testing.expectError(lib.ParseError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1("));
+    try std.testing.expectError(lib.ParseError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1("));
+
+    try std.testing.expectError(lib.ParseError.UnexpectedToken, lib.interpret(std.testing.allocator, "()"));
+    try std.testing.expectError(lib.ParseError.UnexpectedToken, lib.interpret(std.testing.allocator, "1+2*)"));
+    try std.testing.expectError(lib.ParseError.UnexpectedToken, lib.interpret(std.testing.allocator, "sum(1,2,3,,)"));
+
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "max(1,2"));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "max(1"));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1."));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "max("));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "2*"));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "max(1,2*"));
-
-    try std.testing.expectError(lib.ParseError.UnexpectedToken, lib.interpret(std.testing.allocator, "()"));
-    try std.testing.expectError(lib.ParseError.UnexpectedToken, lib.interpret(std.testing.allocator, "1+2*)"));
-    try std.testing.expectError(lib.ParseError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1("));
     try std.testing.expectError(lib.ScanError.UnexpectedTerminate, lib.interpret(std.testing.allocator, "1."));
     try std.testing.expectError(lib.ScanError.UnexpectedSymbol, lib.interpret(std.testing.allocator, "1. + 1"));
 }
