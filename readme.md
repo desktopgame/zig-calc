@@ -16,4 +16,6 @@ zig build run -- "max(1,2)"
 > 2
 zig build run -- "min(1,2)"
 > 1
+zig build run -- "avg(4,4,4,4)"
+> 4
 ````

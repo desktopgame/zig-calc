@@ -12,6 +12,8 @@ pub fn global(name: []const u8) ?Value {
         return .{ .f = &blt_max };
     } else if (std.mem.eql(u8, name, "sum")) {
         return .{ .f = &blt_sum };
+    } else if (std.mem.eql(u8, name, "avg")) {
+        return .{ .f = &blt_avg };
     }
     return null;
 }
@@ -54,6 +56,11 @@ pub fn blt_sum(args: []const Value) FunctionError!Value {
         total += try shouldBeLiteral(arg);
     }
     return .{ .number = total };
+}
+
+pub fn blt_avg(args: []const Value) FunctionError!Value {
+    const sum = try shouldBeLiteral(try blt_sum(args));
+    return .{ .number = sum / @as(f32, @floatFromInt(@as(i32, @intCast(args.len)))) };
 }
 
 //
