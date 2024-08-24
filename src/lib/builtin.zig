@@ -10,6 +10,8 @@ pub fn global(name: []const u8) ?Value {
         return .{ .f = &blt_min };
     } else if (std.mem.eql(u8, name, "max")) {
         return .{ .f = &blt_max };
+    } else if (std.mem.eql(u8, name, "sum")) {
+        return .{ .f = &blt_sum };
     }
     return null;
 }
@@ -44,6 +46,14 @@ pub fn blt_max(args: []const Value) FunctionError!Value {
         }
     }
     return .{ .number = max };
+}
+
+pub fn blt_sum(args: []const Value) FunctionError!Value {
+    var total: f32 = 0;
+    for (args) |arg| {
+        total += try shouldBeLiteral(arg);
+    }
+    return .{ .number = total };
 }
 
 //
