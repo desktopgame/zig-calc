@@ -215,14 +215,6 @@ fn parse(allocator: std.mem.Allocator, source: []const Token) ParseError!*Node {
     return node;
 }
 
-fn parseExprOpt(allocator: std.mem.Allocator, p: *Parser) ?*Node {
-    if (parseExpr(allocator, p)) |node| {
-        return node;
-    } else |_| {
-        return null;
-    }
-}
-
 fn parseExpr(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
     return try parseAddSub(allocator, p);
 }
