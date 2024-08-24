@@ -159,9 +159,15 @@ fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
         switch (token) {
             .symbol => |open| {
                 if (open == '(') {
+                    const start = p.pos;
                     var args = std.ArrayList(*Node).init(allocator);
+                    var lastError: ?ParseError = null;
                     while (true) {
-                        const arg = parseExpr(allocator, p) catch break;
+                        const arg = parseExpr(allocator, p) catch |err| {
+                            p.pos = start;
+                            lastError = err;
+                            break;
+                        };
                         errdefer {
                             for (args.items) |item| {
                                 item.deinit(allocator);
@@ -197,11 +203,11 @@ fn parseCall(allocator: std.mem.Allocator, p: *Parser) ParseError!*Node {
                         switch (closeToken) {
                             .symbol => |closeSym| {
                                 if (closeSym != ')') {
-                                    return ParseError.UnexpectedToken;
+                                    return lastError orelse ParseError.UnexpectedToken;
                                 }
                             },
                             else => {
-                                return ParseError.UnexpectedToken;
+                                return lastError orelse ParseError.UnexpectedToken;
                             },
                         }
                     } else {
